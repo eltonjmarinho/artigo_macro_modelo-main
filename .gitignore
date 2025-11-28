@@ -1,0 +1,31 @@
+# History files
+.Rhistory
+.Rapp.history
+
+# Session Data
+.RData
+
+# User-specific files
+.Ruserdata
+
+# RStudio files
+.Rproj.user/
+
+# Example code in package directories
+*/example/
+
+# RStudio Connect folder
+rsconnect/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.csv
+
+# Data folder - uncomment if you don't want to track data
+# data/
