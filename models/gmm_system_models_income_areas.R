@@ -41,6 +41,15 @@ suppressWarnings({
 
   cat("Base de dados carregada.\n")
 
+  reports_dir <- "reports"
+  if (!dir.exists(reports_dir)) {
+    dir.create(reports_dir, recursive = TRUE)
+    cat("Pasta 'reports' criada.\n")
+  }
+
+  area_results <- list()
+  area_tests <- list()
+
   area_vars <- c("area1", "area2", "area3", "area4", "area5")
   area_labels <- c(
     area1 = "Area 1 Size of Government",
@@ -94,22 +103,22 @@ suppressWarnings({
 
     if (is.null(hansen)) {
       cat("Hansen J-test: não foi possível calcular para este grupo.\n")
-      return(invisible(NULL))
+      return(list(statistic = NA_real_, p_value = NA_real_, df = NA_real_))
     }
 
-    stat <- hansen$statistic
-    pval <- hansen$p.value
-    df <- hansen$parameter
+    stat <- ifelse(is.null(hansen$statistic), NA_real_, as.numeric(hansen$statistic))
+    pval <- ifelse(is.null(hansen$p.value), NA_real_, as.numeric(hansen$p.value))
+    df_num <- ifelse(is.null(hansen$parameter), NA_real_, as.numeric(hansen$parameter))
 
-    stat_txt <- ifelse(is.null(stat) || is.na(stat), NA_real_, as.numeric(stat))
-    pval_txt <- ifelse(is.null(pval) || is.na(pval), NA_real_, as.numeric(pval))
-    df_txt <- ifelse(is.null(df) || is.na(df), "-", formatC(as.numeric(df), format = "f", digits = 0))
-
-    if (is.na(stat_txt) || is.na(pval_txt)) {
+    if (is.na(stat) || is.na(pval)) {
       cat("Hansen J-test: não foi possível calcular para este grupo.\n")
-    } else {
-      cat(sprintf("Hansen J-test: J = %.3f (df=%s), p-valor = %.4f\n", stat_txt, df_txt, pval_txt))
+      return(list(statistic = NA_real_, p_value = NA_real_, df = df_num))
     }
+
+    df_txt <- ifelse(is.na(df_num), "-", formatC(df_num, format = "f", digits = 0))
+    cat(sprintf("Hansen J-test: J = %.3f (df=%s), p-valor = %.4f\n", stat, df_txt, pval))
+
+    list(statistic = stat, p_value = pval, df = df_num)
   }
 
   groups <- unique(data_full$wb_income_group)
@@ -149,6 +158,8 @@ suppressWarnings({
 
       panel_df <- pdata.frame(df, index = c("iso3c", "year"))
 
+      model_variant <- NA_character_
+
       out <- try(
         pgmm(
           formula = gmm_formula,
@@ -160,6 +171,10 @@ suppressWarnings({
         ),
         silent = TRUE
       )
+
+      if (!inherits(out, "try-error")) {
+        model_variant <- "system_ld"
+      }
 
       if (inherits(out, "try-error")) {
         cat("System GMM falhou. Tentando Difference GMM...\n")
@@ -175,18 +190,28 @@ suppressWarnings({
           ),
           silent = TRUE
         )
+
+        if (!inherits(out, "try-error")) {
+          model_variant <- "difference_d"
+        }
       }
 
       if (inherits(out, "try-error")) {
         cat("Não foi possível estimar nenhum modelo GMM para este grupo.\n")
       } else {
-        print(summary(out, robust = FALSE))
-        report_hansen_j(out)
+        summ <- summary(out, robust = FALSE)
+        print(summ)
+
+        hansen_res <- report_hansen_j(out)
+        if (is.null(hansen_res)) {
+          hansen_res <- list(statistic = NA_real_, p_value = NA_real_, df = NA_real_)
+        }
 
         wu_res <- run_wu_hausman(df, wu_formula)
 
         if (is.null(wu_res) || is.na(wu_res$statistic)) {
           cat("Teste Wu-Hausman: não foi possível calcular para este grupo.\n")
+          wu_out <- list(statistic = NA_real_, p_value = NA_real_, df1 = NA_real_, df2 = NA_real_)
         } else {
           df1_txt <- ifelse(is.na(wu_res$df1), "-", formatC(wu_res$df1, format = "f", digits = 0))
           df2_txt <- ifelse(is.na(wu_res$df2), "-", formatC(wu_res$df2, format = "f", digits = 0))
@@ -199,9 +224,70 @@ suppressWarnings({
               wu_res$p_value
             )
           )
+          wu_out <- wu_res
+        }
+
+        coef_mat <- summ$coefficients
+        if (!is.null(coef_mat) && nrow(coef_mat) > 0) {
+          coef_df <- data.frame(
+            term = rownames(coef_mat),
+            coef_mat,
+            row.names = NULL,
+            check.names = FALSE,
+            stringsAsFactors = FALSE
+          )
+
+          meta_df <- data.frame(
+            area_var = area_var,
+            area_label = area_labels[[area_var]],
+            income_group = g,
+            model_variant = model_variant,
+            hansen_stat = hansen_res$statistic,
+            hansen_df = hansen_res$df,
+            hansen_p_value = hansen_res$p_value,
+            wu_statistic = wu_out$statistic,
+            wu_df1 = wu_out$df1,
+            wu_df2 = wu_out$df2,
+            wu_p_value = wu_out$p_value,
+            stringsAsFactors = FALSE
+          )
+
+          meta_df <- meta_df[rep(1, nrow(coef_df)), , drop = FALSE]
+          area_results[[length(area_results) + 1]] <- cbind(meta_df, coef_df)
+
+          area_tests[[length(area_tests) + 1]] <- data.frame(
+            area_var = area_var,
+            area_label = area_labels[[area_var]],
+            income_group = g,
+            model_variant = model_variant,
+            hansen_stat = hansen_res$statistic,
+            hansen_df = hansen_res$df,
+            hansen_p_value = hansen_res$p_value,
+            wu_statistic = wu_out$statistic,
+            wu_df1 = wu_out$df1,
+            wu_df2 = wu_out$df2,
+            wu_p_value = wu_out$p_value,
+            stringsAsFactors = FALSE
+          )
         }
       }
     }
+  }
+
+  if (length(area_results) > 0) {
+    area_output <- file.path(reports_dir, "gmm_system_models_income_areas.csv")
+    area_results_df <- do.call(rbind, area_results)
+    write.csv(area_results_df, area_output, row.names = FALSE)
+    cat(sprintf("\nResultados tabulados salvos em %s\n", area_output))
+  } else {
+    cat("\nNenhum resultado para exportar em gmm_system_models_income_areas.\n")
+  }
+
+  if (length(area_tests) > 0) {
+    area_tests_output <- file.path(reports_dir, "gmm_system_models_income_areas_tests.csv")
+    area_tests_df <- do.call(rbind, area_tests)
+    write.csv(area_tests_df, area_tests_output, row.names = FALSE)
+    cat(sprintf("Resultados dos testes salvos em %s\n", area_tests_output))
   }
 
   cat("\n--- Análise GMM por áreas concluída. ---\n")

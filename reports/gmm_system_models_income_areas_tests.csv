@@ -1,0 +1,21 @@
+"area_var","area_label","income_group","model_variant","hansen_stat","hansen_df","hansen_p_value","wu_statistic","wu_df1","wu_df2","wu_p_value"
+"area1","Area 1 Size of Government","Lower-Middle Income","system_ld",23.5745308161594,6,0.000625214377101916,0.529707514298038,2,90,0.59060130560229
+"area1","Area 1 Size of Government","Upper-Middle Income","system_ld",18.7462473400211,6,0.00461435197287384,1.20510462341568,2,142,0.302706498884085
+"area1","Area 1 Size of Government","High Income","system_ld",24.000000000062,6,0.000522258050019191,3.21164503281538,2,79,0.0456043725662021
+"area1","Area 1 Size of Government","Low Income","system_ld",17.0000000000031,6,0.00928324433609912,0.452246207415771,2,30,0.640463811898253
+"area2","Area 2 Legal System & Property Rights (ajustada por gênero)","Lower-Middle Income","system_ld",16.5823641921845,6,0.010947104431598,0.779071880244883,2,90,0.461900953040364
+"area2","Area 2 Legal System & Property Rights (ajustada por gênero)","Upper-Middle Income","system_ld",27.982616288487,6,9.46736879111112e-05,1.43422492505691,2,142,0.241730653796799
+"area2","Area 2 Legal System & Property Rights (ajustada por gênero)","High Income","system_ld",23.9999999976223,6,0.000522258050558823,3.44861879008398,2,79,0.0366515049279767
+"area2","Area 2 Legal System & Property Rights (ajustada por gênero)","Low Income","system_ld",16.9999999999948,6,0.00928324433612981,0.172576108607735,2,30,0.842323690993453
+"area3","Area 3 Sound Money","Lower-Middle Income","system_ld",19.3814540559515,6,0.00356564879195572,0.704337049378688,2,90,0.497140905617171
+"area3","Area 3 Sound Money","Upper-Middle Income","system_ld",21.531830747746,6,0.00147153183460255,1.14568571289083,2,142,0.320927405627219
+"area3","Area 3 Sound Money","High Income","system_ld",24.0000000001797,6,0.000522258049993139,2.04639505702243,2,79,0.135993482032219
+"area3","Area 3 Sound Money","Low Income","system_ld",16.9999999999997,6,0.0092832443361119,0.24367137323719,2,30,0.785281239494179
+"area4","Area 4 Freedom to trade internationally","Lower-Middle Income","system_ld",27.4822224650087,6,0.000117580600397675,0.663869434284735,2,90,0.517358018826863
+"area4","Area 4 Freedom to trade internationally","Upper-Middle Income","system_ld",18.1289191847737,6,0.00591796796938655,3.55591121650813,2,142,0.0311253971993742
+"area4","Area 4 Freedom to trade internationally","High Income","system_ld",23.9999999986588,6,0.000522258050329559,2.34430236637537,2,79,0.102553426946479
+"area4","Area 4 Freedom to trade internationally","Low Income","system_ld",17.0000000000175,6,0.00928324433604632,0.29207713247118,2,30,0.748810088949772
+"area5","Area 5 Regulation","Lower-Middle Income","system_ld",16.7991913265541,6,0.0100502802707424,0.792072971595081,2,90,0.456036320865889
+"area5","Area 5 Regulation","Upper-Middle Income","system_ld",16.3220611198054,6,0.0121258548850856,1.74566139070611,2,142,0.178253837825061
+"area5","Area 5 Regulation","High Income","system_ld",24.0000000011681,6,0.000522258049774518,2.14234871791604,2,79,0.124149283865444
+"area5","Area 5 Regulation","Low Income","system_ld",16.0925771866106,6,0.0132656004806247,0.0341222802268365,2,30,0.966490772239124
