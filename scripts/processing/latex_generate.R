@@ -73,6 +73,13 @@ format_se <- function(se, digits = 4) {
   sprintf(paste0("(%0.", digits, "f)"), se)
 }
 
+trunc_value <- function(value, digits = 3) {
+  if (length(value) == 0 || is.na(value)) return(NA_real_)
+  scale <- 10^digits
+  truncated <- trunc(value * scale) / scale
+  truncated
+}
+
 format_test_cell <- function(statistic, p_value, digits_stat = 3, digits_p = 3) {
   stat_num <- suppressWarnings(as.numeric(statistic))
   p_num <- suppressWarnings(as.numeric(p_value))
@@ -84,13 +91,13 @@ format_test_cell <- function(statistic, p_value, digits_stat = 3, digits_p = 3) 
     return("")
   }
 
-  stat_str <- if (has_stat) formatC(stat_num, digits = digits_stat, format = "f") else ""
+  stat_str <- if (has_stat) sprintf(paste0("%0.", digits_stat, "f"), trunc_value(stat_num, digits_stat)) else ""
 
   if (!has_p) {
     return(stat_str)
   }
 
-  p_str <- sprintf("(p=%s)", formatC(p_num, digits = digits_p, format = "f"))
+  p_str <- sprintf("(p=%s)", sprintf(paste0("%0.", digits_p, "f"), trunc_value(p_num, digits_p)))
 
   if (!has_stat) {
     return(sprintf("\\begin{tabular}[c]{@{}c@{}}%s\\end{tabular}", p_str))
@@ -254,7 +261,7 @@ generate_coef_table <- function(df, caption, filename, dep_label = "log_gdp", in
         p_val <- if (!is.null(p_col) && p_col %in% names(cell)) cell[[p_col]][1] else NA_real_
         values <- c(values, format_test_cell(stat_val, p_val))
       }
-      body <- c(body, paste(values, collapse = " & "), "\\")
+      body <- c(body, paste(values, collapse = " & "), "\\\\")
     }
   }
 

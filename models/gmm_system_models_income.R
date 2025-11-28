@@ -193,6 +193,18 @@ suppressWarnings({
         hansen_res <- list(statistic = NA_real_, p_value = NA_real_, df = NA_real_)
       }
 
+      ar2_test <- tryCatch(plm::mtest(out, order = 2), error = function(e) NULL)
+      if (is.null(ar2_test)) {
+        cat("Teste Arellano-Bond AR(2): não foi possível calcular para este grupo.\n")
+        ar2_out <- list(statistic = NA_real_, p_value = NA_real_)
+      } else {
+        ar2_stat <- suppressWarnings(as.numeric(ar2_test$statistic[1]))
+        ar2_p <- suppressWarnings(as.numeric(ar2_test$p.value))
+        cat(sprintf("Teste Arellano-Bond AR(2): estatística = %.3f, p-valor = %.4f\n",
+                    ar2_stat, ar2_p))
+        ar2_out <- list(statistic = ar2_stat, p_value = ar2_p)
+      }
+
       wu_res <- run_wu_hausman(df, wu_formula)
 
       if (is.null(wu_res) || is.na(wu_res$statistic)) {
@@ -229,6 +241,8 @@ suppressWarnings({
           hansen_stat = hansen_res$statistic,
           hansen_df = hansen_res$df,
           hansen_p_value = hansen_res$p_value,
+          ar2_statistic = ar2_out$statistic,
+          ar2_p_value = ar2_out$p_value,
           wu_statistic = wu_out$statistic,
           wu_df1 = wu_out$df1,
           wu_df2 = wu_out$df2,
@@ -245,6 +259,8 @@ suppressWarnings({
           hansen_stat = hansen_res$statistic,
           hansen_df = hansen_res$df,
           hansen_p_value = hansen_res$p_value,
+          ar2_statistic = ar2_out$statistic,
+          ar2_p_value = ar2_out$p_value,
           wu_statistic = wu_out$statistic,
           wu_df1 = wu_out$df1,
           wu_df2 = wu_out$df2,
