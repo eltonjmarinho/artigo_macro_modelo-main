@@ -1,0 +1,41 @@
+\begin{table}[H]
+\centering
+\caption{Modelos GMM por grupo de renda}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{l*{4}{c}}
+\hline
+ & \multicolumn{4}{c}{\textbf{Variável dependente: log_gdp}} \\
+\cline{2-5}
+ & (1) & (2) & (3) & (4) \\
+\hline
+lag(log\_gdp, 1) & 0.5675** & 0.6952*** & 0.4656** & 0.4162***
+\\
+ & (0.2267) & (0.1638) & (0.1854) & (0.1355)
+\\
+log\_inv & 0.0561** & -0.0104 & 0.0092 & -0.0381*
+\\
+ & (0.0273) & (0.0177) & (0.0122) & (0.0199)
+\\
+log\_lab\_part & 0.0084 & -0.1964 & -0.2557** & 1.1974***
+\\
+ & (0.2026) & (0.1359) & (0.1029) & (0.2932)
+\\
+log\_edu & 0.3655*** & 0.4231*** & 0.6362*** & 0.9404***
+\\
+ & (0.1048) & (0.0957) & (0.1112) & (0.2555)
+\\
+ef & 0.2076*** & 0.0823** & 0.1043*** & 0.2934***
+\\
+ & (0.0724) & (0.0403) & (0.0263) & (0.0692)
+\\
+\hline
+Teste Sargan & \begin{tabular}[c]{@{}c@{}}17.000\\(p=0.009)\end{tabular} & \begin{tabular}[c]{@{}c@{}}24.902\\(p=0.000)\end{tabular} & \begin{tabular}[c]{@{}c@{}}21.716\\(p=0.001)\end{tabular} & \begin{tabular}[c]{@{}c@{}}24.000\\(p=0.001)\end{tabular}
+\
+Autocorrelação AR(2) &  &  &  & 
+\
+\hline
+\multicolumn{5}{l}{\footnotesize Nota: *p$<0.1$; **p$<0.05$; ***p$<0.01$.} \\
+\multicolumn{5}{l}{\footnotesize Fonte: Elaborado pelos autores.} \\
+\end{tabular}
+}
+\end{table}
