@@ -89,20 +89,31 @@ print(observations_by_income, n = Inf)
 
 # --- Tabela de Estatísticas Descritivas por Grupo de Renda ---
 
-# Define as variáveis numéricas para sumarizar
-numeric_vars <- c("gdp", "inv", "edu", "inf", "credit", "rem", "intr", "lab_part", "ef")
+# Define as variáveis numéricas para sumarizar, incluindo as áreas 1-5
+area_vars <- c("area1", "area2", "area3", "area4", "area5")
+numeric_vars <- c("gdp", "inv", "edu", "inf", "credit", "rem", "intr", "lab_part", "ef", area_vars)
+
+available_numeric_vars <- intersect(numeric_vars, colnames(df_balanced))
+missing_numeric_vars <- setdiff(numeric_vars, available_numeric_vars)
+
+if (length(missing_numeric_vars) > 0) {
+  warning(sprintf(
+    "As seguintes variáveis numéricas não foram encontradas no dataset e serão ignoradas: %s",
+    paste(missing_numeric_vars, collapse = ", ")
+  ))
+}
 
 # Garante que as variáveis são numéricas e remove NAs para a sumarização
 df_data_clean <- df_balanced %>% # Use df_balanced as it's the main dataframe
-  select(wb_income_group, all_of(numeric_vars)) %>%
-  mutate(across(all_of(numeric_vars), as.numeric)) %>%
+  select(wb_income_group, all_of(available_numeric_vars)) %>%
+  mutate(across(all_of(available_numeric_vars), as.numeric)) %>%
   drop_na() # Remove linhas com NA para garantir estatísticas precisas
 
 # Calcula as estatísticas descritivas por grupo de renda
 summary_stats <- df_data_clean %>%
   group_by(wb_income_group) %>%
   summarise(
-    across(all_of(numeric_vars),
+    across(all_of(available_numeric_vars),
            list(
              N = ~n(),
              Mean = ~mean(., na.rm = TRUE),
@@ -158,38 +169,94 @@ message("\nEstatísticas descritivas geradas com sucesso.")
 # --- Análise de Correlação e VIF para o Dataset Completo ---
 cat("\n--- Análise de Correlação e VIF para o Dataset Completo ---\n\n")
 
-# Seleciona apenas as variáveis independentes para o dataset completo
-# Exclui 'inv' (variável dependente)
-independent_vars <- numeric_vars[numeric_vars != "inv"]
-df_full_independent <- df_data_clean %>%
-  select(all_of(independent_vars))
+run_corr_vif <- function(data, vars, label, corr_extra = NULL, corr_order = NULL, vif_vars = NULL) {
+  vars <- unique(vars)
+  if (length(vars) < 2) {
+    cat(sprintf("Conjunto '%s' não possui variáveis suficientes para análise.\\n\\n", label))
+    return()
+  }
 
-# Remove linhas com NA para a análise de correlação e VIF
-df_full_independent <- na.omit(df_full_independent)
+  base_corr <- unique(c(vars, intersect(corr_extra, colnames(data))))
+  if (!is.null(corr_order)) {
+    corr_vars <- intersect(corr_order, base_corr)
+    remaining <- setdiff(base_corr, corr_vars)
+    corr_vars <- c(corr_vars, remaining)
+  } else {
+    corr_vars <- base_corr
+  }
+  if (length(corr_vars) < 2) {
+    corr_vars <- vars
+  }
 
-if (nrow(df_full_independent) > 0 && ncol(df_full_independent) > 1) {
-  # Calcula e imprime a matriz de correlação
-  correlation_matrix <- cor(df_full_independent)
-  cat("#### Matriz de Correlação:\n")
-  print(kable(correlation_matrix, format = "markdown", digits = 2))
-  cat("\n")
+  if (is.null(vif_vars)) {
+    vif_vars <- vars
+  }
+  vif_vars <- unique(vif_vars)
 
-  # Calcula e imprime os valores de VIF
-  if (ncol(df_full_independent) >= 2) {
-    vif_model_formula_str <- paste(colnames(df_full_independent)[1], "~", paste(colnames(df_full_independent)[-1], collapse = " + "))
-    vif_model <- lm(as.formula(vif_model_formula_str), data = df_full_independent)
-    
+  corr_subset <- data %>%
+    select(all_of(corr_vars)) %>%
+    drop_na()
+
+  cat(sprintf("### %s\\n\\n", label))
+
+  if (nrow(corr_subset) == 0) {
+    cat("#### Matriz de Correlação:\\n")
+    cat("Não há observações completas para calcular a matriz de correlação.\\n\\n")
+  } else {
+    correlation_matrix <- cor(corr_subset)
+    cat("#### Matriz de Correlação:\\n")
+    print(kable(correlation_matrix, format = "markdown", digits = 2))
+    cat("\\n")
+  }
+
+  vif_subset <- data %>%
+    select(all_of(vif_vars)) %>%
+    drop_na()
+
+  if (nrow(vif_subset) == 0) {
+    cat("Não há observações completas para calcular VIF neste conjunto.\\n\\n")
+    return()
+  }
+
+  if (ncol(vif_subset) >= 2) {
+    response_var <- vif_vars[1]
+    predictor_vars <- vif_vars[-1]
+    vif_formula <- as.formula(paste(response_var, "~", paste(predictor_vars, collapse = " + ")))
+    vif_model <- lm(vif_formula, data = vif_subset)
     vif_results <- vif(vif_model)
     vif_values <- data.frame(Variable = names(vif_results), VIF = as.numeric(vif_results))
-    cat("#### Valores de VIF:\n")
+    cat("#### Valores de VIF:\\n")
     print(kable(vif_values, format = "markdown", digits = 2))
-    cat("\n")
+    cat("\\n")
   } else {
-    cat("Não há variáveis independentes suficientes para calcular o VIF (mínimo 2).\n\n")
+    cat("Não há variáveis independentes suficientes para calcular o VIF (mínimo 2).\\n\\n")
   }
-} else {
-  cat("Não há dados suficientes ou variáveis independentes para análise de correlação e VIF no dataset completo.\n\n")
 }
+
+core_vars <- setdiff(available_numeric_vars, intersect(area_vars, available_numeric_vars))
+area_vars_present <- intersect(area_vars, available_numeric_vars)
+macro_corr_vars <- intersect(c("gdp", "inv", "edu", "inf", "credit", "rem", "intr", "lab_part"), colnames(df_data_clean))
+subcomponent_order <- unique(c(macro_corr_vars, area_vars_present))
+
+if (length(core_vars) >= 2) {
+  run_corr_vif(df_data_clean, core_vars, "Variáveis macro + EF (sem subcomponentes)")
+} else {
+  cat("Conjunto de variáveis macro insuficiente para análise.\n\n")
+}
+
+if (length(area_vars_present) >= 2) {
+  run_corr_vif(
+    df_data_clean,
+    area_vars_present,
+    "Subcomponentes de liberdade (sem índice agregado)",
+    corr_extra = macro_corr_vars,
+    corr_order = subcomponent_order,
+    vif_vars = subcomponent_order
+  )
+} else {
+  cat("Não há variáveis suficientes de subcomponentes para análise.\n\n")
+}
+
 cat("\n") # Add a newline for spacing
 
 
