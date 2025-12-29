@@ -28,6 +28,11 @@ suppressWarnings({
         log_gdp_lag3 = lag(log_gdp, 3)
       ) %>%
       ungroup() %>%
+      mutate(
+        break_pandemic = as.integer(year >= 2020),
+        break_commod = as.integer(year >= 2014 & year <= 2016),
+        break_2022 = as.integer(year >= 2022)
+      ) %>%
       filter(
         is.finite(log_gdp) &
           is.finite(log_inv) &
@@ -59,18 +64,28 @@ suppressWarnings({
     area5 = "Area 5 Regulation"
   )
 
-  run_wu_hausman <- function(df, formula) {
-    iv_fit <- try(AER::ivreg(formula = formula, data = df), silent = TRUE)
+  run_wu_hausman <- function(df, model_formula) {
+    fstr <- paste(deparse(model_formula), collapse = " ")
+    parts <- strsplit(fstr, "\\|")[[1]]
+    if (length(parts) < 2) return(NULL)
 
-    if (inherits(iv_fit, "try-error")) {
-      return(NULL)
-    }
+    left <- trimws(parts[1])
+    instr <- trimws(parts[2])
+
+    left <- gsub("lag\\(\\s*log_gdp\\s*,\\s*1\\s*\\)", "log_gdp_lag1", left)
+    instr <- gsub("lag\\(\\s*log_gdp\\s*,\\s*2\\s*:\\s*3\\s*\\)", "log_gdp_lag2 + log_gdp_lag3", instr)
+    instr <- gsub("lag\\(\\s*log_gdp\\s*,\\s*2\\s*\\)", "log_gdp_lag2", instr)
+    instr <- gsub("lag\\(\\s*log_gdp\\s*,\\s*3\\s*\\)", "log_gdp_lag3", instr)
+
+    iv_formula_str <- paste(left, "|", instr)
+    iv_formula <- try(as.formula(iv_formula_str), silent = TRUE)
+    if (inherits(iv_formula, "try-error")) return(NULL)
+
+    iv_fit <- try(AER::ivreg(formula = iv_formula, data = df), silent = TRUE)
+    if (inherits(iv_fit, "try-error")) return(NULL)
 
     diagnostics <- summary(iv_fit, diagnostics = TRUE)$diagnostics
-
-    if (is.null(diagnostics)) {
-      return(NULL)
-    }
+    if (is.null(diagnostics)) return(NULL)
 
     label <- if ("Wu-Hausman F" %in% rownames(diagnostics)) {
       "Wu-Hausman F"
@@ -80,15 +95,10 @@ suppressWarnings({
       NULL
     }
 
-    if (is.null(label)) {
-      return(NULL)
-    }
+    if (is.null(label)) return(NULL)
 
     stats <- diagnostics[label, , drop = FALSE]
-
-    pull_value <- function(col) {
-      if (col %in% colnames(stats)) stats[1, col] else NA_real_
-    }
+    pull_value <- function(col) { if (col %in% colnames(stats)) stats[1, col] else NA_real_ }
 
     list(
       statistic = pull_value("statistic"),
@@ -102,8 +112,8 @@ suppressWarnings({
     hansen <- tryCatch(sargan(model), error = function(e) NULL)
 
     if (is.null(hansen)) {
-      cat("Hansen J-test: não foi possível calcular para este grupo.\n")
-      return(list(statistic = NA_real_, p_value = NA_real_, df = NA_real_))
+      cat("Hansen J-test (via sargan): não foi possível calcular para este grupo.\n")
+      return(list(statistic = NA_real_, p_value = NA_real_, df = NA_real_, test = NA_character_))
     }
 
     stat <- ifelse(is.null(hansen$statistic), NA_real_, as.numeric(hansen$statistic))
@@ -111,14 +121,55 @@ suppressWarnings({
     df_num <- ifelse(is.null(hansen$parameter), NA_real_, as.numeric(hansen$parameter))
 
     if (is.na(stat) || is.na(pval)) {
-      cat("Hansen J-test: não foi possível calcular para este grupo.\n")
-      return(list(statistic = NA_real_, p_value = NA_real_, df = df_num))
+      cat("Hansen J-test (via sargan): não foi possível calcular para este grupo.\n")
+      return(list(statistic = NA_real_, p_value = NA_real_, df = df_num, test = "Sargan"))
     }
 
     df_txt <- ifelse(is.na(df_num), "-", formatC(df_num, format = "f", digits = 0))
-    cat(sprintf("Hansen J-test: J = %.3f (df=%s), p-valor = %.4f\n", stat, df_txt, pval))
+    cat(sprintf("Hansen/Sargan J-test: J = %.3f (df=%s), p-valor = %.4f\n", stat, df_txt, pval))
 
-    list(statistic = stat, p_value = pval, df = df_num)
+    list(statistic = stat, p_value = pval, df = df_num, test = "Sargan")
+  }
+
+  get_overid_test <- function(model) {
+    summ_r <- tryCatch(summary(model, robust = TRUE), error = function(e) NULL)
+    if (!is.null(summ_r) && !is.null(summ_r$diagnostics)) {
+      diag <- summ_r$diagnostics
+      rn <- rownames(diag)
+      idx <- which(grepl("Hansen", rn, ignore.case = TRUE) | grepl("J-test", rn, ignore.case = TRUE) | grepl("J", rn))
+      if (length(idx) > 0) {
+        stat <- suppressWarnings(as.numeric(diag[idx[1], "statistic"]))
+        pval <- suppressWarnings(as.numeric(diag[idx[1], "p-value"]))
+        return(list(test = "Hansen", statistic = stat, p_value = pval, df = NA_real_, robust = TRUE))
+      }
+    }
+
+    s <- tryCatch(sargan(model), error = function(e) NULL)
+    if (!is.null(s)) {
+      stat <- ifelse(is.null(s$statistic), NA_real_, as.numeric(s$statistic))
+      pval <- ifelse(is.null(s$p.value), NA_real_, as.numeric(s$p.value))
+      df_num <- ifelse(is.null(s$parameter), NA_real_, as.numeric(s$parameter))
+      return(list(test = "Sargan", statistic = stat, p_value = pval, df = df_num, robust = FALSE))
+    }
+
+    list(test = NA_character_, statistic = NA_real_, p_value = NA_real_, df = NA_real_, robust = NA)
+  }
+
+  run_all_tests <- function(model, df, model_formula) {
+    overid <- get_overid_test(model)
+
+    ar2_test <- tryCatch(plm::mtest(model, order = 2), error = function(e) NULL)
+    if (is.null(ar2_test)) {
+      ar2_out <- list(statistic = NA_real_, p_value = NA_real_)
+    } else {
+      ar2_stat <- suppressWarnings(as.numeric(ar2_test$statistic[1]))
+      ar2_p <- suppressWarnings(as.numeric(ar2_test$p.value))
+      ar2_out <- list(statistic = ar2_stat, p_value = ar2_p)
+    }
+
+    wu_res <- run_wu_hausman(df, model_formula)
+
+    list(overid = overid, ar2 = ar2_out, wu = wu_res)
   }
 
   groups <- unique(data_full$wb_income_group)
@@ -128,14 +179,12 @@ suppressWarnings({
     cat(sprintf("\n=== Resultados usando %s (%s) ===\n", area_labels[[area_var]], area_var))
 
     gmm_formula <- as.formula(sprintf(
-      "log_gdp ~ lag(log_gdp, 1) + log_inv + log_lab_part + log_edu + %s | lag(log_gdp, 2:3)",
+      "log_gdp ~ lag(log_gdp, 1) + log_inv + log_lab_part + log_edu + %s | lag(log_gdp,2:5) + lag(log_inv,2:6) + lag(log_lab_part,2:5) +
+    lag(log_edu,2:5) + break_pandemic + break_commod + break_2022",
       area_var
     ))
 
-    wu_formula <- as.formula(sprintf(
-      "log_gdp ~ log_gdp_lag1 + log_inv + log_lab_part + log_edu + %s | log_gdp_lag2 + log_gdp_lag3",
-      area_var
-    ))
+    # Not using a separate wu_formula; Wu-Hausman will be constructed from gmm_formula
 
     for (g in groups) {
       cat("\n--- Estimando modelo para grupo:", g, "---\n")
@@ -219,24 +268,31 @@ suppressWarnings({
           ar2_out <- list(statistic = ar2_stat, p_value = ar2_p)
         }
 
-        wu_res <- run_wu_hausman(df, wu_formula)
+        tests <- run_all_tests(out, df, gmm_formula)
+        overid <- tests$overid
+        ar2_out <- tests$ar2
+        wu_out <- tests$wu
 
-        if (is.null(wu_res) || is.na(wu_res$statistic)) {
+        if (is.null(overid) || is.na(overid$statistic)) {
+          cat("Teste de sobreidentificação: não foi possível calcular para este grupo.\n")
+          hansen_res <- list(statistic = NA_real_, p_value = NA_real_, df = NA_real_, test = NA_character_)
+        } else {
+          hansen_res <- list(statistic = overid$statistic, p_value = overid$p_value, df = overid$df, test = overid$test)
+        }
+
+        if (is.null(ar2_out) || is.na(ar2_out$statistic)) {
+          cat("Teste Arellano-Bond AR(2): não foi possível calcular para este grupo.\n")
+        } else {
+          cat(sprintf("Teste Arellano-Bond AR(2): estatística = %.3f, p-valor = %.4f\n", ar2_out$statistic, ar2_out$p_value))
+        }
+
+        if (is.null(wu_out) || is.na(wu_out$statistic)) {
           cat("Teste Wu-Hausman: não foi possível calcular para este grupo.\n")
           wu_out <- list(statistic = NA_real_, p_value = NA_real_, df1 = NA_real_, df2 = NA_real_)
         } else {
-          df1_txt <- ifelse(is.na(wu_res$df1), "-", formatC(wu_res$df1, format = "f", digits = 0))
-          df2_txt <- ifelse(is.na(wu_res$df2), "-", formatC(wu_res$df2, format = "f", digits = 0))
-          cat(
-            sprintf(
-              "Teste Wu-Hausman F: estatística = %.3f (df1=%s, df2=%s), p-valor = %.4f\n",
-              wu_res$statistic,
-              df1_txt,
-              df2_txt,
-              wu_res$p_value
-            )
-          )
-          wu_out <- wu_res
+          df1_txt <- ifelse(is.na(wu_out$df1), "-", formatC(wu_out$df1, format = "f", digits = 0))
+          df2_txt <- ifelse(is.na(wu_out$df2), "-", formatC(wu_out$df2, format = "f", digits = 0))
+          cat(sprintf("Teste Wu-Hausman F: estatística = %.3f (df1=%s, df2=%s), p-valor = %.4f\n", wu_out$statistic, df1_txt, df2_txt, wu_out$p_value))
         }
 
         coef_mat <- summ$coefficients
